@@ -10,7 +10,10 @@
 #include <fstream>
 #include <vector>
 
-#include "contour_detection_slider.cpp"
+#include <thread>         // std::this_thread::sleep_for
+#include <chrono>         // std::chrono::seconds
+
+//#include "contour_detection_slider.cpp"
 
 using namespace cv;
 using namespace std;
@@ -108,9 +111,10 @@ fs::path select_image(int dir_idx, bool random_image = true, fs::path image_name
 }
 
 Mat load_bw_image(fs::path image_path) {
-	Mat src = imread(image_path.string());
+	Mat src = imread(image_path.string(), IMREAD_GRAYSCALE);
+	rotate(src, src, ROTATE_90_COUNTERCLOCKWISE);
 	Mat src_gray;
-	cvtColor(src, src_gray, COLOR_BGR2GRAY);
+	//cvtColor(src, src_gray, COLOR_BGR2GRAY);
 
 	if (src.empty()) {
 		cout << "Could not read image: " << image_path << endl;
@@ -119,7 +123,8 @@ Mat load_bw_image(fs::path image_path) {
 	return src_gray;
 }
 Mat load_cl_image(fs::path image_path) {
-	Mat src = imread(image_path.string());
+	Mat src = imread(image_path.string(), IMREAD_COLOR);
+	rotate(src, src, ROTATE_90_COUNTERCLOCKWISE);
 
 	if (src.empty()) {
 		cout << "Could not read image: " << image_path << endl;
@@ -127,6 +132,7 @@ Mat load_cl_image(fs::path image_path) {
 
 	return src;
 }
+
 
 /// <summary>
 /// Reads the pitch and roll angles of the drone from the csv log, corresponding to the given image frame.
@@ -220,11 +226,27 @@ std::tuple<float, float> retrieve_attitude(fs::path img_path, int flight_case) {
 /// <param name="pitch_rad">Drone pitch angle in radiants.</param>
 /// <param name="roll_rad">Drone roll angle in radiants.</param>
 /// <returns></returns>
-Mat horizont_filter(Mat bw_img, float pitch_rad, float roll_rad) {
+Mat horizont_filter(Mat img, float pitch_rad, float roll_rad) {
 	// TODO: calculate the horizont line: https://stackoverflow.com/questions/60801612/coding-an-artificial-horizon-with-4-points-and-a-specified-bank-angle
 	// TODO: create openCV mat with all black under horizont line
 	// TODO: overlay the horizont mat over bw_img
-	return bw_img;
+
+	Point p_center, p_left, p_right;
+
+	p_center.x = img.cols / 2;
+	p_center.y = img.rows / 2;
+
+	circle(img, p_center, 10, Scalar(0, 0, 255));
+
+	p_right.x = (int)round(p_center.x + 2000 * cos(roll_rad));
+	p_right.y = (int)round(p_center.y + 2000 * sin(roll_rad));
+
+	p_left.x = (int)round(p_center.x - 2000 * cos(roll_rad));
+	p_left.y = (int)round(p_center.y - 2000 * sin(roll_rad));
+
+	line(img, p_left, p_right, Scalar(255, 0, 0), 1);
+
+	return img;
 }
 
 enum smoothFilters {
@@ -268,60 +290,153 @@ Mat edge_detection(Mat img, int low_treshhold, int treshhold_factor = 2) {
 	return edges;
 }
 
-void find_params(
-	int iterations = 10, int case_type = 10,
-	int smooth_factor_low = 10, int smooth_factor_high = 30, int smooth_factor_step = 10, int type = NORMALISED, int kernel = 3,
-	int canny_low_trsh_low = 20, int canny_low_trsh_high = 40, int canny_low_trsh_step = 10)
-{	
-	fs::path img_path;
-	string name;
-	Mat img, filtered, edges;
 
-	for (int i = 0; i < iterations; i++) {
-		img_path = select_image(case_type);
-		img = load_bw_image(img_path);
-		name = img_path.stem().string() + "_orig.jpg";
-		imshow(name, img);
-		int l = waitKey(0);
-		imwrite(name, img);
+//int main() {
+//	srand(123);
+//	int flight_case = 10;
+//	fs::path img = select_image(flight_case);
+//	cout << img << endl;
+//
+//
+//
+//	//contour_detection(img);
+//
+//
+//
+//	auto [roll, pitch] = retrieve_attitude(img, flight_case);
+//	cout << "roll: " << roll << ", " << "pitch: " << pitch << endl;
+//
+//	Mat img_bw = load_cl_image(img);
+//	horizont_filter(img_bw, pitch, roll);
+//	imshow("img", img_bw);
+//	waitKey();
+//
+//
+//	return 0;
+//}
 
-		for (int smooth_factor = smooth_factor_low; smooth_factor <= smooth_factor_high; smooth_factor = smooth_factor + smooth_factor_step) {
-			filtered = smooth(img, type, kernel, smooth_factor);
-			for (int low_trsh = canny_low_trsh_low; low_trsh <= canny_low_trsh_high; low_trsh = low_trsh + canny_low_trsh_step) {
-				edges = edge_detection(filtered, low_trsh);
-				name = img_path.stem().string() + "_" + "sf" + to_string(smooth_factor) + "_" + "lt" + to_string(low_trsh) + ".jpg";
-				imshow("sf" + to_string(smooth_factor) + "_" + "lt" + to_string(low_trsh), edges);
-				int l = waitKey(0);
-				imwrite(name, edges);
-			}
-		}
+
+
+Mat color_filter(
+	Mat img, bool show_img = false,
+	Scalar low_hsv = Scalar(35, 100, 90), Scalar high_hsv = Scalar(45, 255, 255), 
+	int kernel = 9, int blurring_type = NORMALISED)
+{
+
+	Mat img_HSV, threshold, threshold_BGR, combined;
+
+	// Convert from BGR to HSV colorspace
+	img = smooth(img, blurring_type, kernel);
+	cvtColor(img, img_HSV, COLOR_BGR2HSV);
+	// Detect the object based on HSV Range Values
+	inRange(img_HSV, low_hsv, high_hsv, threshold);
+
+	if (show_img) {
+		cvtColor(threshold, threshold_BGR, COLOR_GRAY2BGR);
+		addWeighted(img, 1, threshold_BGR, 1, 0, combined);
+		imshow("filtered", img);
+		imshow("threshold", threshold);
+		imshow("combined", combined);
 	}
-	return;
+
+	return threshold;
+}
+
+int bound_int(int num, int min, int max) {
+	int out;
+	if (num < min) {
+		out = min;
+	}
+	else if (num > max) {
+		out = max;
+	}
+	else {
+		out = num;
+	}
+	return out;
+}
+
+
+/// <summary>
+/// Checks the bottom_count of pixels at the bottom of each column if they are white.
+/// If more than certainty many black pixels are found at the bottom of the column, it is considered unsafe.
+/// </summary>
+/// <param name="img"> BW colorfiltered image in openCV::Mat </param>
+/// <param name="bottom_count"> The width of the band on the bottom to scan for black </param>
+/// <param name="certainty"> The number of black pixels in a column of the bottom_count band, that makes that direction unsafe. </param>
+/// <returns> Array with indexes representing the column index, and values: 1 is safe, 2 is obstacle, 0 is outside of frame </returns>
+int* ground_obstacle_detect(Mat img, int safe_vector[], int bottom_count = 20, int certainty = 1) {
+	// (0, 0) is top left corner
+	Mat edited;
+	int threat;
+
+	edited = img.clone();
+
+	for (int col = 0; col < img.cols; col=col+1) {
+		threat = 0;
+		for (int row = int(img.rows) - 1; row >= 0; row--) {
+			if (int(img.at<uchar>(row, col)) == 0) {
+				if (row >= int(img.rows) - bottom_count) {
+					threat++;
+				}
+
+			} else if (int(img.at<uchar>(row, col)) == 255) {
+
+				threat--;
+
+			} else {
+				cout << "wrong" << endl;
+				cout << img.at<uchar>(row, col) << endl;
+				break;
+			}
+
+			threat = bound_int(threat, 0, certainty);
+
+			if (threat == certainty) {
+				safe_vector[col] = 2;
+			}
+			else if (threat == 0) {
+				safe_vector[col] = 1;
+			}
+			//cout << "(" << col << ", " << row << ") ->  threat = " << threat << ",  safe_vector = " << safe_vector[col] << endl;
+
+		}
+
+		if (safe_vector[col] == 2) {
+			line(edited, Point(col, 0), Point(col, edited.rows / 5), Scalar(255));
+		}
+
+	}
+	//line(edited, Point(0, edited.rows - bottom_count), Point(edited.cols, edited.rows - bottom_count), Scalar(255));
+	//imshow("asd", edited);
+	//waitKey();
+	return safe_vector;
 }
 
 
 int main() {
-	srand(123);
-	int flight_case = 10;
-	fs::path img = select_image(flight_case);
-	cout << img << endl;
+	Mat frame;
+	srand(42069);
+	int flight_case = 13, cols, rows;
+	while (true) {
+		fs::path img = select_image(flight_case);
+		cout << img;
+		frame = load_cl_image(img);
 
 
 
-	//contour_detection(img);
+		Mat greens = color_filter(frame);
 
+		int safe_array[520] = { };
+		int *safe_array_pt = ground_obstacle_detect(greens, safe_array);
 
-
-	auto [roll, pitch] = retrieve_attitude(img, flight_case);
-	cout << "roll: " << roll << ", " << "pitch: " << pitch << endl;
-
-	Mat img_bw = load_bw_image(img);
-	horizont_filter(img_bw, pitch, roll);
-
-
-
+		for (int i = 0; i < 520; i++) {
+			if (safe_array[i] == 2) {
+				line(frame, Point(i, 0), Point(i, frame.rows/5), Scalar(0, 0, 255));
+			}
+		}
+		imshow("asd", frame);
+		waitKey();
+	}
 	return 0;
 }
-
-
-
