@@ -145,6 +145,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="contour_detection_slider.cpp" />
     <ClCompile Include="obstacle_detection.cpp" />
     <ClCompile Include="opencv_test.cpp" />
   </ItemGroup>
