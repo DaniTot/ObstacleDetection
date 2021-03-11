@@ -283,6 +283,13 @@ Mat smooth(Mat img, int filter_option = NORMALISED, int kernel_size = 5, int sig
 	return out_img;
 }
 
+/// <summary>
+/// Canny Edge detection.
+/// </summary>
+/// <param name="img"></param>
+/// <param name="low_treshhold"></param>
+/// <param name="treshhold_factor"></param>
+/// <returns></returns>
 Mat edge_detection(Mat img, int low_treshhold, int treshhold_factor = 2) {
 	Mat edges;
 	edges.create(img.size(), img.type());
@@ -291,36 +298,20 @@ Mat edge_detection(Mat img, int low_treshhold, int treshhold_factor = 2) {
 }
 
 
-//int main() {
-//	srand(123);
-//	int flight_case = 10;
-//	fs::path img = select_image(flight_case);
-//	cout << img << endl;
-//
-//
-//
-//	//contour_detection(img);
-//
-//
-//
-//	auto [roll, pitch] = retrieve_attitude(img, flight_case);
-//	cout << "roll: " << roll << ", " << "pitch: " << pitch << endl;
-//
-//	Mat img_bw = load_cl_image(img);
-//	horizont_filter(img_bw, pitch, roll);
-//	imshow("img", img_bw);
-//	waitKey();
-//
-//
-//	return 0;
-//}
-
-
-
+/// <summary>
+/// Creates an output image that is white where input image is within the specified color range, and black where it isn't.
+/// </summary>
+/// <param name="img">Input opencv Mat image</param>
+/// <param name="low_hsv">The lower bounds of the color range, in the HSV color space.</param>
+/// <param name="high_hsv">The higher bounds of the color range, in the HSV color space.</param>
+/// <param name="kernel">The size of the side of the kernel which is used for bluring/smoothing the input image. Must be odd number.</param>
+/// <param name="blurring_type">The type of blurring function used. Check enum smoothFilters. </param>
+/// <returns>BW opencv Mat</returns>
 Mat color_filter(
-	Mat img, bool show_img = false,
+	Mat img,
 	Scalar low_hsv = Scalar(35, 100, 90), Scalar high_hsv = Scalar(45, 255, 255), 
-	int kernel = 9, int blurring_type = NORMALISED)
+	int kernel = 9, int blurring_type = NORMALISED,
+	bool show_img = false)
 {
 
 	Mat img_HSV, threshold, threshold_BGR, combined;
@@ -342,6 +333,13 @@ Mat color_filter(
 	return threshold;
 }
 
+/// <summary>
+/// Bounds num between min and max.
+/// </summary>
+/// <param name="num"></param>
+/// <param name="min"></param>
+/// <param name="max"></param>
+/// <returns></returns>
 int bound_int(int num, int min, int max) {
 	int out;
 	if (num < min) {
@@ -398,8 +396,6 @@ int* ground_obstacle_detect(Mat img, int safe_vector[], int bottom_count = 20, i
 			else if (threat == 0) {
 				safe_vector[col] = 1;
 			}
-			//cout << "(" << col << ", " << row << ") ->  threat = " << threat << ",  safe_vector = " << safe_vector[col] << endl;
-
 		}
 
 		if (safe_vector[col] == 2) {
@@ -407,9 +403,6 @@ int* ground_obstacle_detect(Mat img, int safe_vector[], int bottom_count = 20, i
 		}
 
 	}
-	//line(edited, Point(0, edited.rows - bottom_count), Point(edited.cols, edited.rows - bottom_count), Scalar(255));
-	//imshow("asd", edited);
-	//waitKey();
 	return safe_vector;
 }
 
